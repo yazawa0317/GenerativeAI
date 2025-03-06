@@ -1,74 +1,50 @@
+from langchain.chains import RetrievalQA  # 適切なモジュール名に置き換えてください
+from langchain.prompts import ChatPromptTemplate
+from langchain_openai import AzureChatOpenAI
+from langchain_core.runnables import (
+    RunnableLambda,
+    RunnableParallel,
+    RunnablePassthrough,
+)
+from langchain import hub
+from langchain_core.output_parsers import StrOutputParser
+from makeretriver import set_embeddings, create_and_save_faiss_index
 import os
-import shutil
-import uuid
-from langchain_community.vectorstores import FAISS
-from langchain_openai import AzureOpenAIEmbeddings
-from dotenv import load_dotenv
 
-# .envから環境変数を読み込む
-load_dotenv()
+def make_chain(model, retriever, retriever_type: str):
+    if retriever_type == "Llama-Index":
+        return retriever
 
-def set_embeddings(embedding_type):
-    if embedding_type == "OpenAI":
+    # 直接 AzureChatOpenAI を利用
+    llm = AzureChatOpenAI(
+        deployment_name=model,  # Azure OpenAI のモデル名
+        azure_endpoint=os.getenv("AZURE_ENDPOINT_URL"),
+        api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+        api_version=os.getenv("OPENAI_API_VERSION"),
+    )
 
-        # Azure OpenAI の接続情報
-        endpoint = os.getenv("AZURE_ENDPOINT_URL")
-        subscription_key = os.getenv("AZURE_OPENAI_API_KEY")
-        api_version = os.getenv("OPENAI_API_VERSION")
+    prompt = ChatPromptTemplate.from_template(
+        "あなたは親切なアシスタントです。日本語で回答してください。\n\n{question}"
+    )
 
-        # OpenAIEmbeddings を Azure 用に設定
-        embedding = AzureOpenAIEmbeddings(
-            openai_api_key=subscription_key,
-            openai_api_base=endpoint,
-            openai_api_type="azure",
-            openai_api_version="2023-12-01-preview",
-            deployment="text-embedding-ada-002",
-        )
+    qa = (
+        {
+            "context": retriever,
+            "question": RunnablePassthrough(),
+        }
+        | prompt
+        | llm  # ここで LLM を直接使う
+        | StrOutputParser()
+    )
 
-    else:
-        # Azure OpenAI の接続情報
-        endpoint = os.getenv("AZURE_ENDPOINT_URL")
-        subscription_key = os.getenv("AZURE_OPENAI_API_KEY")
-        api_version = os.getenv("OPENAI_API_VERSION")
-
-        # OpenAIEmbeddings を Azure 用に設定
-        embedding = AzureOpenAIEmbeddings(
-            openai_api_key=subscription_key,
-            openai_api_base=endpoint,
-            openai_api_type="azure",
-            openai_api_version="2023-12-01-preview",
-            deployment="text-embedding-ada-002",
-        )
-
-    return embedding
-
-# ベクトル化するテキストをリストとして受け取る関数
-def create_and_save_faiss_index(texts, embedding):
-
-    # FAISS インデックスの保存先
-    curdir = os.path.dirname(os.path.abspath(__file__))
-    faiss_index_path = os.path.join(curdir, "faiss_index", f"index_{uuid.uuid4()}")
-
-
-    """
-    テキストリストを受け取り、FAISS インデックスを作成し、ローカルに保存。
-    保存先パスを返す。
-    """
-    # FAISS インデックスを作成
-    vector_store = FAISS.from_texts(texts, embedding)
-    
-    # FAISS インデックスをローカルに保存
-    vector_store.save_local(faiss_index_path)
-    print(f"FAISS インデックスを {faiss_index_path}/ に保存しました！")
-    
-    # 保存したインデックスを再読み込み
-    vector_store = FAISS.load_local(faiss_index_path, embedding, allow_dangerous_deserialization=True)
-    print("FAISS インデックスをローカルから読み込みました！")
-    
-    # ベクトルストアを返す
-    return vector_store, faiss_index_path
+    return qa
 
 if __name__ == "__main__":
+
+
+    from dotenv import load_dotenv
+    # .envから環境変数を読み込む
+    load_dotenv()
 
     # 外部から受け取るテキストリスト
     texts = [
@@ -76,23 +52,24 @@ if __name__ == "__main__":
         "FAISS は類似検索に適しています。",
         "Python で機械学習を行う方法。",
         "クラウド AI の利点について。",
+        "ベルデータはシステムインテグレータの会社です。"
     ]
 
     # FAISS インデックスを作成して返す
     embedding = set_embeddings(embedding_type='OpenAI')
     vector_store, faiss_index_path = create_and_save_faiss_index(texts, embedding)
 
-    # クエリテキスト
-    query = "強力"
-    results = vector_store.similarity_search(query, k=3)
 
-    # 検索結果を表示
-    print("検索結果:")
-    for i, res in enumerate(results):
-        print(f"{i+1}. {res.page_content}")
+    model_version = "gpt-4o-mini"  # 使用するモデルを指定
+    endpoint = os.getenv("AZURE_ENDPOINT_URL")
+    subscription_key = os.getenv("AZURE_OPENAI_API_KEY")
+    api_version = os.getenv("OPENAI_API_VERSION")
 
-    if os.path.exists(faiss_index_path):
-        shutil.rmtree(faiss_index_path)
-        print(f"FAISS インデックスの保存先 {faiss_index_path} を削除しました！")
-    else:
-        print(f"{faiss_index_path} は既に削除されています。")
+    retriever = vector_store.as_retriever(k=5)
+    qa_instance = make_chain(model='gpt-4o', retriever=retriever, retriever_type="stuff")  # 適切なリトリーバータイプを指定
+
+    # 質問を実行
+    question = "ベルデータは何の会社ですか？"
+#    result = qa_instance({"question": question})  # 質問を辞書形式で渡す
+    result = qa_instance.invoke(question)  # 質問を辞書形式で渡す
+    print(result)

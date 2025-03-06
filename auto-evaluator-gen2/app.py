@@ -19,7 +19,7 @@ from textspliter import fixlen_split_text, recursive_split_text
 
 #
 #def make_llm
-from openai import AzureOpenAI
+from langchain_openai import AzureChatOpenAI
 #
 
 #def make_retriever
@@ -33,6 +33,27 @@ from langchain_core.runnables import (
     RunnableParallel,
     RunnablePassthrough,
 )
+from langchain.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+#
+
+# run evalution
+import time
+from text_utils import GRADE_DOCS_PROMPT, GRADE_ANSWER_PROMPT, GRADE_DOCS_PROMPT_FAST, GRADE_ANSWER_PROMPT_FAST, GRADE_ANSWER_PROMPT_BIAS_CHECK, GRADE_ANSWER_PROMPT_OPENAI
+from langchain.evaluation.qa import QAEvalChain
+#
+
+import altair as alt
+
+
+import const
+import streamlit as st
+from streamlit_option_menu import option_menu
+
+st.set_page_config(**const.SET_PAGE_CONFIG)
+st.markdown(const.HIDE_ST_STYLE, unsafe_allow_html=True)
+selected = option_menu(**const.OPTION_MENU_CONFIG)
+
 
 from dotenv import load_dotenv
 # .envからAOAI接続ようのパラメータを読み込み環境変数にセット
@@ -40,6 +61,23 @@ load_dotenv()
 
 import streamlit as st
 
+# Keep dataframe in memory to accumulate experimental results
+if "existing_df" not in st.session_state:
+    summary = pd.DataFrame(columns=['chunk_chars',
+                                    'overlap',
+                                    'split',
+                                    'model',
+                                    'retriever',
+                                    'embedding',
+                                    'num_neighbors',
+                                    'Latency',
+                                    'Retrieval score',
+                                    'Answer score'])
+    st.session_state.existing_df = summary
+else:
+    summary = st.session_state.existing_df
+
+@st.cache_data
 def load_docs(files: List) -> str:
     """
     Load docs from files
@@ -120,7 +158,7 @@ def make_llm(model_version: str = 'gpt-4o-mini'):
         subscription_key = os.getenv("AZURE_OPENAI_API_KEY")
         api_version = os.getenv("OPENAI_API_VERSION")
 
-        client = AzureOpenAI(
+        client = AzureChatOpenAI(
             azure_deployment=model_version,
             azure_endpoint=endpoint,
             api_key=subscription_key,
@@ -187,11 +225,181 @@ def make_chain(llm, retriever, retriever_type: str) -> RetrievalQA:
     if retriever_type == "Llama-Index":
         qa = retriever
     else:
-        qa = RetrievalQA.from_chain_type(llm,
-                                         chain_type="stuff",
-                                         retriever=retriever,
-                                         input_key="question")
+
+#        filter_runnable = RunnableLambda(lambda x: {"question": x["question"]})
+
+        prompt = ChatPromptTemplate.from_template(
+            "あなたは親切なアシスタントです。日本語で回答してください。\n\n{question}"
+        )
+
+        qa = (
+            {
+                "context": retriever,
+                "question": RunnablePassthrough(),
+            }
+#            | filter_runnable
+            | prompt
+            | llm  # ここで LLM を直接使う
+            | StrOutputParser()
+            | RunnableLambda(lambda output: {'result': output})
+        )
+
     return qa
+
+def grade_model_answer(predicted_dataset: List, predictions: List, grade_answer_prompt: str) -> List:
+    """
+    Grades the distilled answer based on ground truth and model predictions.
+    @param predicted_dataset: A list of dictionaries containing ground truth questions and answers.
+    @param predictions: A list of dictionaries containing model predictions for the questions.
+    @param grade_answer_prompt: The prompt level for the grading. Either "Fast" or "Full".
+    @return: A list of scores for the distilled answers.
+    """
+    # Grade the distilled answer
+    st.info("`Grading model answer ...`")
+    # Set the grading prompt based on the grade_answer_prompt parameter
+    if grade_answer_prompt == "Fast":
+        prompt = GRADE_ANSWER_PROMPT_FAST
+    elif grade_answer_prompt == "Descriptive w/ bias check":
+        prompt = GRADE_ANSWER_PROMPT_BIAS_CHECK
+    elif grade_answer_prompt == "OpenAI grading prompt":
+        prompt = GRADE_ANSWER_PROMPT_OPENAI
+    else:
+        prompt = GRADE_ANSWER_PROMPT
+
+    endpoint = os.getenv("AZURE_ENDPOINT_URL")
+    subscription_key = os.getenv("AZURE_OPENAI_API_KEY")
+    api_version = os.getenv("OPENAI_API_VERSION")
+
+    llm_runnable = AzureChatOpenAI(
+        azure_deployment='gpt-4o-mini',
+        azure_endpoint=endpoint,
+        api_key=subscription_key,
+        api_version=api_version,
+        temperature=0
+    )
+
+#    prompt_runnable = ChatPromptTemplate.from_template(prompt)
+
+    # Create an evaluation chain
+#    eval_chain = prompt | llm_runnable | StrOutputParser()
+    eval_chain = QAEvalChain.from_llm(
+    llm=llm_runnable,  # LLM
+    prompt=prompt
+    )
+
+
+    # Evaluate the predictions and ground truth using the evaluation chain
+    graded_outputs = eval_chain.evaluate(
+        predicted_dataset,
+        predictions,
+        question_key="question",
+        prediction_key="result"
+    )
+
+    return graded_outputs
+
+
+def grade_model_retrieval(gt_dataset: List, predictions: List, grade_docs_prompt: str):
+    """
+    Grades the relevance of retrieved documents based on ground truth and model predictions.
+    @param gt_dataset: list of dictionaries containing ground truth questions and answers.
+    @param predictions: list of dictionaries containing model predictions for the questions
+    @param grade_docs_prompt: prompt level for the grading. Either "Fast" or "Full"
+    @return: list of scores for the retrieved documents.
+    """
+    # Grade the docs retrieval
+    st.info("`Grading relevance of retrieved docs ...`")
+
+    # Set the grading prompt based on the grade_docs_prompt parameter
+    prompt = GRADE_DOCS_PROMPT_FAST if grade_docs_prompt == "Fast" else GRADE_DOCS_PROMPT
+
+    # Create an evaluation chain
+    endpoint = os.getenv("AZURE_ENDPOINT_URL")
+    subscription_key = os.getenv("AZURE_OPENAI_API_KEY")
+    api_version = os.getenv("OPENAI_API_VERSION")
+
+    llm_runnable = AzureChatOpenAI(
+        azure_deployment='gpt-4o-mini',
+        azure_endpoint=endpoint,
+        api_key=subscription_key,
+        api_version=api_version,
+        temperature=0
+    )
+
+#    prompt_runnable = ChatPromptTemplate.from_template(prompt)
+
+    # Create an evaluation chain
+    eval_chain = QAEvalChain.from_llm(
+    llm=llm_runnable,  # LLM
+    prompt=prompt
+    )
+
+    # Evaluate the predictions and ground truth using the evaluation chain
+    graded_outputs = eval_chain.evaluate(
+        gt_dataset,
+        predictions,
+        question_key="question",
+        prediction_key="result"
+    )
+    return graded_outputs
+
+
+def run_evaluation(chain, retriever, eval_set, grade_prompt, retriever_type, num_neighbors):
+    """
+    Runs evaluation on a model's performance on a given evaluation dataset.
+    @param chain: Model chain used for answering questions
+    @param retriever:  Document retriever used for retrieving relevant documents
+    @param eval_set: List of dictionaries containing questions and corresponding ground truth answers
+    @param grade_prompt: String prompt used for grading model's performance
+    @param retriever_type: String specifying the type of retriever used
+    @param num_neighbors: Number of neighbors to retrieve using the retriever
+    @return: A tuple of four items:
+    - answers_grade: A dictionary containing scores for the model's answers.
+    - retrieval_grade: A dictionary containing scores for the model's document retrieval.
+    - latencies_list: A list of latencies in seconds for each question answered.
+    - predictions_list: A list of dictionaries containing the model's predicted answers and relevant documents for each question.
+    """
+    st.info("`Running evaluation ...`")
+    predictions_list = []
+    retrieved_docs = []
+    gt_dataset = []
+    latencies_list = []
+
+    for data in eval_set:
+
+        # Get answer and log latency
+        start_time = time.time()
+        if retriever_type != "Llama-Index":
+            # invokeのdataはstrじゃないとエラーになる
+            predictions_list.append(chain.invoke(data['question']))
+        elif retriever_type == "Llama-Index":
+            answer = chain.query(data["question"], similarity_top_k=num_neighbors, response_mode="tree_summarize",
+                                 use_async=True)
+            predictions_list.append({"question": data["question"], "answer": data["answer"], "result": answer.response})
+        gt_dataset.append(data)
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        latencies_list.append(elapsed_time)
+
+        # Retrieve docs
+        retrieved_doc_text = ""
+        if retriever_type == "Llama-Index":
+            for i, doc in enumerate(answer.source_nodes):
+                retrieved_doc_text += "Doc %s: " % str(i + 1) + doc.node.text + " "
+
+        else:
+            docs = retriever.get_relevant_documents(data["question"])
+            for i, doc in enumerate(docs):
+                retrieved_doc_text += "Doc %s: " % str(i + 1) + doc.page_content + " "
+
+        retrieved = {"question": data["question"], "answer": data["answer"], "result": retrieved_doc_text}
+        retrieved_docs.append(retrieved)
+
+    # Grade
+    answers_grade = grade_model_answer(gt_dataset, predictions_list, grade_prompt)
+    retrieval_grade = grade_model_retrieval(gt_dataset, retrieved_docs, grade_prompt)
+    return answers_grade, retrieval_grade, latencies_list, predictions_list
+
 
 # サイドバー
 with st.sidebar.form("user_input"):
@@ -280,9 +488,12 @@ if uploaded_file:
                                                                       retriever_type, num_neighbors)
 
     # Assemble outputs
-    d = pd.DataFrame(predictions)
-    d['answer score'] = [g['text'] for g in graded_answers]
-    d['docs score'] = [g['text'] for g in graded_retrieval]
+#    d = pd.DataFrame(predictions)
+    d = pd.DataFrame()
+    d['question'] = [g['question'] for g in eval_set]    
+    d['answer'] = [g['result'] for g in predictions]    
+    d['answer score'] = [g['results'] for g in graded_answers]
+    d['docs score'] = [g['results'] for g in graded_retrieval]
     d['latency'] = latency
 
     # Summary statistics

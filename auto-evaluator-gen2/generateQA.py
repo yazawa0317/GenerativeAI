@@ -96,7 +96,7 @@ if __name__ == "__main__":
     # .envからAOAI接続ようのパラメータを読み込み環境変数にセット
     load_dotenv()
 
-    pdf_text = extract_text_from_pdf("C:\\Develop\\python\\GenAI\\RAG\\Spliter\\doc\\test.pdf")
+    pdf_text = extract_text_from_pdf("C:\\Develop\\python\\GenerativeAI\\Spliter\\doc\\test.pdf")
     results = generateQA(text=pdf_text, model="gpt-4o", chunk=1024, overlap=128, num_questions=10)
 
     for qa in results:
