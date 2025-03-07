@@ -46,6 +46,7 @@ from langchain.evaluation.qa import QAEvalChain
 import altair as alt
 
 
+<<<<<<< HEAD
 import const
 import streamlit as st
 from streamlit_option_menu import option_menu
@@ -53,6 +54,15 @@ from streamlit_option_menu import option_menu
 st.set_page_config(**const.SET_PAGE_CONFIG)
 st.markdown(const.HIDE_ST_STYLE, unsafe_allow_html=True)
 selected = option_menu(**const.OPTION_MENU_CONFIG)
+=======
+import stconfig
+import streamlit as st
+from streamlit_option_menu import option_menu
+
+st.set_page_config(**stconfig.SET_PAGE_CONFIG)
+st.markdown(stconfig.HIDE_ST_STYLE, unsafe_allow_html=True)
+# selected = option_menu(**const.OPTION_MENU_CONFIG)
+>>>>>>> 0216c82 (beta1.0modify func)
 
 
 from dotenv import load_dotenv
@@ -108,7 +118,7 @@ def load_docs(files: List) -> str:
     return all_text
 
 @st.cache_data
-def generate_eval(text: str, num_questions: int, chunk: int):
+def generate_eval(text: str, num_questions: int, chunk: int, embeddings):
     """
     Generate eval set
     @param text: text to generate eval set from
@@ -118,15 +128,14 @@ def generate_eval(text: str, num_questions: int, chunk: int):
     """
     st.info("`Generating eval set ...`")
     try:
-        result = generateQA(text=text, chunk=1024, num_questions=5)
-        print(result)
+        result = generateQA(text=text, chunk=chunk, num_questions=num_questions, encoding_name=embeddings)
     except:
         st.warning('Error generating question')
     
     return result
 
 @st.cache_resource
-def split_texts(text, chunk_size: int, overlap, split_method: str):
+def split_texts(text, encoding_name, chunk_size: int, overlap, split_method: str):
     """
     Split text into chunks
     @param text: text to split
@@ -137,12 +146,12 @@ def split_texts(text, chunk_size: int, overlap, split_method: str):
     """
     st.info("`Splitting doc ...`")
     if split_method == "RecursiveTextSplitter":
-        split_text = recursive_split_text(text=text, chunk_size=chunk_size, overlap=overlap)
+        split_text = recursive_split_text(text=text, encoding_name=encoding_name, chunk_size=chunk_size, overlap=overlap)
     elif split_method == "CharacterTextSplitter":
-        split_text = fixlen_split_text(text=text, chunk_size=chunk_size, overlap=overlap)
+        split_text = fixlen_split_text(text=text, encoding_name=encoding_name, chunk_size=chunk_size, overlap=overlap)
     else:
         st.warning("`Split method not recognized. Using RecursiveCharacterTextSplitter`", icon="⚠️")
-        split_text = recursive_split_text(text=text, chunk_size=chunk_size, overlap=overlap)
+        split_text = recursive_split_text(text=text,  encoding_name=encoding_name, chunk_size=chunk_size, overlap=overlap)
     return split_text
 
 @st.cache_resource
@@ -163,6 +172,7 @@ def make_llm(model_version: str = 'gpt-4o-mini'):
             azure_endpoint=endpoint,
             api_key=subscription_key,
             api_version=api_version,
+            verbose=True
         )
 
     return client
@@ -180,12 +190,8 @@ def make_retriever(splits, retriever_type, embedding_type, num_neighbors, _llm):
     """
     st.info("`Making retriever ...`")
     # Set embeddings
-    if embedding_type == "OpenAI":
-        embedding = set_embeddings(embedding_type='OpenAI')
 
-    else:
-        st.warning("`Embedding type not recognized. Using OpenAI`", icon="⚠️")
-        embedding = set_embeddings(embedding_type='OpenAI')
+    embedding = set_embeddings(embedding_type)
 
     # Select retriever
     if retriever_type == "similarity-search":
@@ -229,7 +235,19 @@ def make_chain(llm, retriever, retriever_type: str) -> RetrievalQA:
 #        filter_runnable = RunnableLambda(lambda x: {"question": x["question"]})
 
         prompt = ChatPromptTemplate.from_template(
+<<<<<<< HEAD
             "あなたは親切なアシスタントです。日本語で回答してください。\n\n{question}"
+=======
+        """
+        あなたは優れたアシスタントです。質問に対して、親切かつ正確に日本語で回答してください。
+        # 質問に関連する情報です：
+        {context}
+
+        # 質問:
+        {question}
+        上記の情報を参考にして、質問に対する最も適切で具体的な回答を提供してください。不明点がある場合、推測での回答はしないでください。
+        """
+>>>>>>> 0216c82 (beta1.0modify func)
         )
 
         qa = (
@@ -419,8 +437,7 @@ with st.sidebar.form("user_input"):
 
     model = st.radio("`Choose model`",
                      ("gpt-4o-mini",
-                      "gpt-4",
-                      "anthropic"),
+                      "gpt-4o"),
                      index=0)
 
     retriever_type = st.radio("`Choose retriever`",
@@ -434,9 +451,9 @@ with st.sidebar.form("user_input"):
                                      options=[3, 4, 5, 6, 7, 8])
 
     embeddings = st.radio("`Choose embeddings`",
-                          ("HuggingFace",
-                           "OpenAI"),
-                          index=1)
+                          ("text-embedding-3-large",
+                           "text-embedding-ada-002"),
+                          index=0)
 
     grade_prompt = st.radio("`Grading style prompt`",
                             ("Fast",
@@ -472,11 +489,11 @@ if uploaded_file:
     # Generate num_eval_questions questions, each from context of 3k chars randomly selected
     if not uploaded_eval_set:
 #        eval_set = generate_eval(text, num_eval_questions, 3000)
-        eval_set = generate_eval(text, 5, 3000)
+        eval_set = generate_eval(text, num_eval_questions, 1000, embeddings)
     else:
         eval_set = json.loads(uploaded_eval_set.read())
     # Split text
-    splits = split_texts(text, chunk_chars, overlap, split_method)
+    splits = split_texts(text, embeddings, chunk_chars, overlap, split_method)
     # Make LLM
     llm = make_llm(model)
     # Make vector DB
@@ -486,6 +503,10 @@ if uploaded_file:
     # Grade model
     graded_answers, graded_retrieval, latency, predictions = run_evaluation(qa_chain, retriever, eval_set, grade_prompt,
                                                                       retriever_type, num_neighbors)
+
+    e = pd.DataFrame()
+    e['question'] = [g['question'] for g in eval_set]    
+    e['answer'] = [g['answer'] for g in eval_set]    
 
     # Assemble outputs
 #    d = pd.DataFrame(predictions)
@@ -502,6 +523,14 @@ if uploaded_file:
     correct_docs_count = len([text for text in d['docs score'] if "Context is relevant: True" in text])
     percentage_answer = (correct_answer_count / len(graded_answers)) * 100
     percentage_docs = (correct_docs_count / len(graded_retrieval)) * 100
+
+    st.subheader("`QA SET`")
+    st.info(
+        "`I will grade the chain based on: 1/ the relevance of the retrived documents relative to the question and 2/ "
+        "the summarized answer relative to the ground truth answer. You can see (and change) to prompts used for "
+        "grading in text_utils`")
+    st.dataframe(data=e, use_container_width=True)
+
 
     st.subheader("`Run Results`")
     st.info(

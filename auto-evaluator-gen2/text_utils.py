@@ -1,6 +1,14 @@
 import re
 from langchain.prompts import PromptTemplate
+<<<<<<< HEAD
 
+=======
+from langchain_core.prompts.chat import (
+    ChatPromptTemplate,
+    HumanMessagePromptTemplate,
+    SystemMessagePromptTemplate,
+)
+>>>>>>> 0216c82 (beta1.0modify func)
 
 def clean_pdf_text(text: str) -> str:
     """Cleans text extracted from a PDF file."""
@@ -118,3 +126,30 @@ template = """
     "Context is relevant: True or False." \n """
 
 GRADE_DOCS_PROMPT_FAST = PromptTemplate(input_variables=["query", "result", "answer"], template=template)
+<<<<<<< HEAD
+=======
+
+# テキスト分割用プロンプト
+templ1 = """You are a smart assistant designed to help high school teachers come up with reading comprehension questions.
+Given a piece of text, you must come up with a question and answer pair that can be used to test a student's reading comprehension abilities.
+When coming up with this question/answer pair, you must respond in the following format:
+```
+{{
+    "question": "$YOUR_QUESTION_HERE",
+    "answer": "$THE_ANSWER_HERE"
+}}
+```
+
+Everything between the ``` must be valid json.
+You must always answer in Japanese.
+"""
+templ2 = """Please come up with a question/answer pair, in the specified JSON format, for the following text:
+----------------
+{text}"""
+SPLIT_DOCS_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        SystemMessagePromptTemplate.from_template(templ1),
+        HumanMessagePromptTemplate.from_template(templ2),
+    ]
+)
+>>>>>>> 0216c82 (beta1.0modify func)

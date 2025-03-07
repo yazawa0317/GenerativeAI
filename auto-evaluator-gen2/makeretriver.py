@@ -1,74 +1,65 @@
 import os
-import shutil
 import uuid
 from langchain_community.vectorstores import FAISS
 from langchain_openai import AzureOpenAIEmbeddings
 
+# エンベディングモデルの初期化
+def set_embeddings(embedding_model):
 
-def set_embeddings(embedding_type):
-    if embedding_type == "OpenAI":
+    # Azure OpenAI の接続情報
+    endpoint = os.getenv("AZURE_ENDPOINT_URL")
+    subscription_key = os.getenv("AZURE_OPENAI_API_KEY")
 
-        # Azure OpenAI の接続情報
-        endpoint = os.getenv("AZURE_ENDPOINT_URL")
-        subscription_key = os.getenv("AZURE_OPENAI_API_KEY")
+    if embedding_model == "text-embedding-3-large":
+
         api_version = os.getenv("OPENAI_API_VERSION_EMB3L")
         deployment = os.getenv("OPENAI_API_DEPLOYMENT_EMB3L")
 
-        # OpenAIEmbeddings を Azure 用に設定
-        embedding = AzureOpenAIEmbeddings(
-            openai_api_key=subscription_key,
-            openai_api_base=endpoint,
-            openai_api_type="azure",
-            openai_api_version=api_version,
-            deployment=deployment,
-        )
+    elif embedding_model == "text-embedding-ada-002":
+
+        api_version = os.getenv("OPENAI_API_VERSION_ADA2")
+        deployment = os.getenv("OPENAI_API_DEPLOYMENT_ADA2")
 
     else:
-        # Azure OpenAI の接続情報
-        endpoint = os.getenv("AZURE_ENDPOINT_URL")
-        subscription_key = os.getenv("AZURE_OPENAI_API_KEY")
         api_version = os.getenv("OPENAI_API_VERSION_EMB3L")
         deployment = os.getenv("OPENAI_API_DEPLOYMENT_EMB3L")
 
-        # OpenAIEmbeddings を Azure 用に設定
-        embedding = AzureOpenAIEmbeddings(
-            openai_api_key=subscription_key,
-            openai_api_base=endpoint,
-            openai_api_type="azure",
-            openai_api_version=api_version,
-            deployment=deployment,
-        )
+    # OpenAIEmbeddings を Azure 用に設定
+    embedding = AzureOpenAIEmbeddings(
+        openai_api_key=subscription_key,
+        openai_api_base=endpoint,
+        openai_api_type="azure",
+        openai_api_version=api_version,
+        deployment=deployment,
+    )
 
     return embedding
 
 # ベクトル化するテキストをリストとして受け取る関数
-def create_and_save_faiss_index(texts, embedding):
+def create_and_save_faiss_index(texts: list, embedding):
 
     # FAISS インデックスの保存先
     curdir = os.path.dirname(os.path.abspath(__file__))
     faiss_index_path = os.path.join(curdir, "faiss_index", f"index_{uuid.uuid4()}")
 
-
-    """
-    テキストリストを受け取り、FAISS インデックスを作成し、ローカルに保存。
-    保存先パスを返す。
-    """
+    #テキストリストを受け取り、FAISS インデックスを作成し、ローカルに保存。
+    #保存先パスを返す。
     # FAISS インデックスを作成
     vector_store = FAISS.from_texts(texts, embedding)
     
     # FAISS インデックスをローカルに保存
     vector_store.save_local(faiss_index_path)
-    print(f"FAISS インデックスを {faiss_index_path}/ に保存しました！")
     
     # 保存したインデックスを再読み込み
     vector_store = FAISS.load_local(faiss_index_path, embedding, allow_dangerous_deserialization=True)
-    print("FAISS インデックスをローカルから読み込みました！")
     
-    # ベクトルストアを返す
+    # ベクトルストアとパスを返す。パスは後に削除するときに使う
     return vector_store, faiss_index_path
 
+# 使用例
 if __name__ == "__main__":
 
+    import shutil
     from dotenv import load_dotenv
     # .envから環境変数を読み込む
     load_dotenv()
@@ -82,7 +73,7 @@ if __name__ == "__main__":
     ]
 
     # FAISS インデックスを作成して返す
-    embedding = set_embeddings(embedding_type='OpenAI')
+    embedding = set_embeddings(embedding_model='text-embedding-3-large')
     vector_store, faiss_index_path = create_and_save_faiss_index(texts, embedding)
 
     # クエリテキスト
