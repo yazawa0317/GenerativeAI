@@ -193,7 +193,7 @@ def make_retriever(splits, retriever_type, embedding_type, num_neighbors, _llm):
             # vector_store = FAISS.from_texts(splits, HuggingFaceEmbeddings())
         retriever_obj = vector_store.as_retriever(k=num_neighbors)
 
-    # elif retriever_type == "SVM":
+    ## elif retriever_type == "SVM":
     #     retriever_obj = SVMRetriever.from_texts(splits, embedding)
     # elif retriever_type == "TF-IDF":
     #     retriever_obj = TFIDFRetriever.from_texts(splits)
