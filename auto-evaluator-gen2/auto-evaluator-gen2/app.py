@@ -46,15 +46,6 @@ from langchain.evaluation.qa import QAEvalChain
 import altair as alt
 
 
-<<<<<<< HEAD
-import const
-import streamlit as st
-from streamlit_option_menu import option_menu
-
-st.set_page_config(**const.SET_PAGE_CONFIG)
-st.markdown(const.HIDE_ST_STYLE, unsafe_allow_html=True)
-selected = option_menu(**const.OPTION_MENU_CONFIG)
-=======
 import stconfig
 import streamlit as st
 from streamlit_option_menu import option_menu
@@ -62,7 +53,6 @@ from streamlit_option_menu import option_menu
 st.set_page_config(**stconfig.SET_PAGE_CONFIG)
 st.markdown(stconfig.HIDE_ST_STYLE, unsafe_allow_html=True)
 # selected = option_menu(**const.OPTION_MENU_CONFIG)
->>>>>>> 0216c82 (beta1.0modify func)
 
 
 from dotenv import load_dotenv
@@ -235,9 +225,6 @@ def make_chain(llm, retriever, retriever_type: str) -> RetrievalQA:
 #        filter_runnable = RunnableLambda(lambda x: {"question": x["question"]})
 
         prompt = ChatPromptTemplate.from_template(
-<<<<<<< HEAD
-            "あなたは親切なアシスタントです。日本語で回答してください。\n\n{question}"
-=======
         """
         あなたは優れたアシスタントです。質問に対して、親切かつ正確に日本語で回答してください。
         # 質問に関連する情報です：
@@ -247,7 +234,6 @@ def make_chain(llm, retriever, retriever_type: str) -> RetrievalQA:
         {question}
         上記の情報を参考にして、質問に対する最も適切で具体的な回答を提供してください。不明点がある場合、推測での回答はしないでください。
         """
->>>>>>> 0216c82 (beta1.0modify func)
         )
 
         qa = (
