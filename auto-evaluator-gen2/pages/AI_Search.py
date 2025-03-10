@@ -23,7 +23,7 @@ from langchain_openai import AzureChatOpenAI
 #
 
 #def make_retriever
-from tools.makeretriver import set_embeddings, create_and_save_faiss_index
+from tools.makeretriver import set_embeddings, similarity_search_to_aisearch
 #
 
 #def make_chain
@@ -67,21 +67,21 @@ load_dotenv()
 
 import streamlit as st
 
-# # Keep dataframe in memory to accumulate experimental results
-# if "existing_df" not in st.session_state:
-#     summary = pd.DataFrame(columns=['chunk_chars',
-#                                     'overlap',
-#                                     'split',
-#                                     'model',
-#                                     'retriever',
-#                                     'embedding',
-#                                     'num_neighbors',
-#                                     'Latency',
-#                                     'Retrieval score',
-#                                     'Answer score'])
-#     st.session_state.existing_df = summary
-# else:
-#     summary = st.session_state.existing_df
+# Keep dataframe in memory to accumulate experimental results
+if "existing_df" not in st.session_state:
+    summary = pd.DataFrame(columns=['chunk_chars',
+                                    'overlap',
+                                    'split',
+                                    'model',
+                                    'retriever',
+                                    'embedding',
+                                    'num_neighbors',
+                                    'Latency',
+                                    'Retrieval score',
+                                    'Answer score'])
+    st.session_state.existing_df = summary
+else:
+    summary = st.session_state.existing_df
 
 @st.cache_data
 def load_docs(files: List) -> str:
@@ -166,7 +166,7 @@ def make_llm(model_version: str = 'gpt-4o-mini'):
     return client
 
 @st.cache_resource
-def make_retriever(splits, retriever_type, embedding_type, num_neighbors, _llm):
+def make_retriever(retriever_type, embedding_type, target_index, num_neighbors: int = 5, score_threshold: int = 0.6):
     """
     Make document retriever
     @param splits: list of str splits
@@ -184,12 +184,12 @@ def make_retriever(splits, retriever_type, embedding_type, num_neighbors, _llm):
     # Select retriever
     if retriever_type == "similarity-search":
         try:
-            vector_store, faiss_index_path = create_and_save_faiss_index(splits, embedding)
+            vector_store = similarity_search_to_aisearch(embedding, target_index)
         except ValueError:
             st.warning("`Error using OpenAI embeddings (disallowed TikToken token in the text). Using HuggingFace.`",
                        icon="⚠️")
             # vector_store = FAISS.from_texts(splits, HuggingFaceEmbeddings())
-        retriever_obj = vector_store.as_retriever(k=num_neighbors)
+        retriever_obj = RunnableLambda(vector_store.similarity_search_with_relevance_scores).bind(k=num_neighbors,score_threshold=score_threshold)
 
     ## elif retriever_type == "SVM":
     #     retriever_obj = SVMRetriever.from_texts(splits, embedding)
@@ -205,9 +205,9 @@ def make_retriever(splits, retriever_type, embedding_type, num_neighbors, _llm):
     # else:
     #     st.warning("`Retriever type not recognized. Using SVM`", icon="⚠️")
     #     retriever_obj = SVMRetriever.from_texts(splits, embedding)
-    return retriever_obj, faiss_index_path
+    return retriever_obj
 
-def make_chain(llm, retriever, retriever_type: str) -> RetrievalQA:
+def make_chain(llm, retriever) -> RetrievalQA:
     """
     Make chain
     @param llm: model
@@ -216,25 +216,24 @@ def make_chain(llm, retriever, retriever_type: str) -> RetrievalQA:
     @return: chain (or return retriever for Llama-Index)
     """
     st.info("`Making chain ...`")
-    if retriever_type == "Llama-Index":
-        qa = retriever
-    else:
 
 #        filter_runnable = RunnableLambda(lambda x: {"question": x["question"]})
 
-        prompt = CHAT_COMPL_PROMPT
+    prompt = CHAT_COMPL_PROMPT
 
-        qa = (
-            {
-                "context": retriever,
-                "question": RunnablePassthrough(),
-            }
+    qa = (
+        # RunnableLambda(lambda x: {"context": retriever, "question": x["question"]})
+        {
+            "context": retriever,
+            "question": RunnablePassthrough(),
+        }
 #            | filter_runnable
-            | prompt
-            | llm  # ここで LLM を直接使う
-            | StrOutputParser()
-            | RunnableLambda(lambda output: {'result': output})
-        )
+        | prompt
+        | llm  # ここで LLM を直接使う
+        | StrOutputParser()
+        | RunnableLambda(lambda output: {'result': output})
+    )
+    # qa = {"context": retriever,"question": RunnablePassthrough()} | prompt | llm | StrOutputParser() | RunnableLambda(lambda output: {'result': output})
 
     return qa
 
@@ -382,7 +381,7 @@ def run_evaluation(chain, retriever, eval_set, grade_prompt, retriever_type, num
         else:
             docs = retriever.invoke(data["question"])
             for i, doc in enumerate(docs):
-                retrieved_doc_text += "Doc %s: " % str(i + 1) + doc.page_content + " "
+                retrieved_doc_text += "Doc %s: " % str(i + 1) + doc[0].page_content + " "
 
         retrieved = {"question": data["question"], "answer": data["answer"], "result": retrieved_doc_text}
         retrieved_docs.append(retrieved)
@@ -450,6 +449,11 @@ def main():
         num_neighbors = st.select_slider("`Choose # chunks to retrieve`",
                                         options=[3, 4, 5, 6, 7, 8])
 
+        target_index = st.radio("`Choose index`",
+                                ("yazawa-index01"),
+                                index=0)
+
+
         embeddings = st.radio("`Choose embeddings`",
                             ("text-embedding-3-large",
                             "text-embedding-ada-002"),
@@ -497,14 +501,12 @@ def main():
         # Make LLM
         llm = make_llm(model)
         # Make vector DB
-        retriever, faiss_index_path = make_retriever(splits, retriever_type, embeddings, num_neighbors, llm)
+        retriever = make_retriever(retriever_type, embeddings, target_index)
         # Make chain
-        qa_chain = make_chain(llm, retriever, retriever_type)
+        qa_chain = make_chain(llm, retriever)
         # Grade model
         graded_answers, graded_retrieval, latency, predictions = run_evaluation(qa_chain, retriever, eval_set, grade_prompt,
                                                                         retriever_type, num_neighbors)
-        # Cleanup
-        cleanup(faiss_index_path)
 
         e = pd.DataFrame()
         e['question'] = [g['question'] for g in eval_set]    

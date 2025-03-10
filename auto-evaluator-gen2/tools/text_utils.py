@@ -149,9 +149,9 @@ SPLIT_DOCS_PROMPT = ChatPromptTemplate.from_messages(
 
 # 回答生成用プロンプト
 template = """
-You are an excellent assistant. Answer questions in a helpful and accurate manner. \n
-If there is anything unclear, please do not guess at the answer. \n
-Your answers must be in Japanese. \n
+You are an excellent assistant. Prepare a response based on the information about the given question. \n
+If the information given is insufficient, do not guess the answer and do not create an answer. \n
+Please answer in Japanese. \n
 # Information related to the question: \n
 {context}
 
