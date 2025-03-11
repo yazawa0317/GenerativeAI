@@ -37,7 +37,7 @@ from langchain_core.output_parsers import StrOutputParser
 
 # run evalution
 import time
-from text_utils import (
+from tools.text_utils import (
     GRADE_DOCS_PROMPT, 
     GRADE_ANSWER_PROMPT, 
     GRADE_DOCS_PROMPT_FAST, 

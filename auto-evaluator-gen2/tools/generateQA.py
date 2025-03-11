@@ -11,8 +11,8 @@ from langchain_core.runnables.base import RunnableEach
 from langchain_openai import AzureChatOpenAI
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from textspliter import set_encoding_type
-from text_utils import SPLIT_DOCS_PROMPT as prompt
+from tools.textspliter import set_encoding_type
+from tools.text_utils import SPLIT_DOCS_PROMPT as prompt
 
 
 # LLMの初期化
@@ -56,7 +56,7 @@ def generateQA(text, model='gpt-4o-mini', encoding_name='text-embedding-3-large'
         return [doc.page_content for doc in docs]
 
     # 再帰的分割 with ランダム
-    def split_text_with_sampling(text):
+    def split_text_with_sampling(text,chunk):
 
         # テキストを分割
         docs = text_splitter.create_documents([text])
@@ -66,8 +66,14 @@ def generateQA(text, model='gpt-4o-mini', encoding_name='text-embedding-3-large'
         if num_questions < len(split_texts):
             selected_texts = random.sample(split_texts, num_questions)
         else:
-            # 十分な数がない場合は全て
-            selected_texts = split_texts  
+        # 十分な分割数がない場合、chunkをつなげて増やす。
+            selected_texts = split_texts
+            additional_splits = [text[i:i+chunk] for i in range(0, len(text), chunk)]
+            for _ in additional_splits:
+                if len(selected_texts) >= num_questions:
+                    break
+                selected_texts.append(_)
+
 
         return selected_texts
 
@@ -75,7 +81,7 @@ def generateQA(text, model='gpt-4o-mini', encoding_name='text-embedding-3-large'
 #    split_text = RunnableLambda(split_text_as_string)
 
     # テキスト分割をRunnnable化
-    split_text = RunnableLambda(split_text_with_sampling)
+    split_text = RunnableLambda(lambda x: split_text_with_sampling(x,chunk=chunk))
 
     # LLMモデルの初期化 Runnable
     llm_runnable = set_llm(model='gpt-4o-mini')
