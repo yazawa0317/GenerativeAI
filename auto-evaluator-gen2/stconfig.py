@@ -2,7 +2,7 @@ SET_PAGE_CONFIG = {
     "page_title": "Streamlit Base",
 #    "page_icon": "😀",
     "layout": "wide",
-    "initial_sidebar_state": "collapsed",
+    "initial_sidebar_state": "expanded",
 }
 
 

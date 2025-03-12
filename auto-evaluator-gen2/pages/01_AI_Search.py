@@ -3,6 +3,7 @@ import openai
 import json
 import pandas as pd
 import shutil
+import requests
 
 # def load_docs
 from typing import List
@@ -82,6 +83,25 @@ if "existing_df" not in st.session_state:
     st.session_state.existing_df = summary
 else:
     summary = st.session_state.existing_df
+
+def get_ai_serach_indexes():
+    azure_search_endpoint = os.getenv("AZURE_SEARCH_SERVICE_ENDPOINT")
+    azure_search_key = os.getenv("AZURE_SEARCH_KEY")
+    azure_search_api_version = os.getenv("AZURE_SEARCH_API_VERSION")
+
+    headers = {
+        "Content-Type": "application/json",
+        "api-key": azure_search_key
+    }
+
+    try:
+        r = requests.get(azure_search_endpoint + "/indexes?api-version=" + azure_search_api_version, headers=headers)
+        r.raise_for_status()  # 4xx, 5xx エラーなら例外発生
+        return [index["name"] for index in r.json()["value"]]
+
+    except Exception as e:
+        raise (f"インデックス情報が取得できませんでした: {e}")  
+
 
 @st.cache_data
 def load_docs(files: List) -> str:
@@ -449,9 +469,8 @@ def main():
         num_neighbors = st.select_slider("`Choose # chunks to retrieve`",
                                         options=[3, 4, 5, 6, 7, 8])
 
-        target_index = st.radio("`Choose index`",
-                                ("yazawa-index01"),
-                                index=0)
+        target_index = st.selectbox("`Choose index`",
+                                options=get_ai_serach_indexes())
 
 
         embeddings = st.radio("`Choose embeddings`",
@@ -606,4 +625,3 @@ if __name__ == "__main__":
     #     st.error('Username/password is incorrect')
     # elif st.session_state['authentication_status'] == None:
     #     st.warning('Please enter your username and password')
-
