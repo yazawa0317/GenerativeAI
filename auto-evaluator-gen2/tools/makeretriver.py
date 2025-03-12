@@ -145,17 +145,16 @@ if __name__ == "__main__":
     retriever = RunnableLambda(vector_store.similarity_search_with_relevance_scores).bind(k=1,score_threshold=0.5)
 
     prompt = CHAT_COMPL_PROMPT
-    rag_chain = {"context": retriever, "question": RunnablePassthrough()} | prompt | llm | StrOutputParser() | RunnableLambda(lambda output: {'result': output})
-    result = rag_chain.invoke("When did I visited Asia?")
-    result2 = retriever.invoke("第７条に記載されている給与の非常時払の支払い条件は何ですか？")
-    print(result2)
-    retrieved_doc_text = ""
+#    rag_chain = {"context": retriever, "question": RunnablePassthrough()} | prompt | llm | StrOutputParser() | RunnableLambda(lambda output: {'result': output})
+#    result = rag_chain.invoke("When did I visited Asia?")
+    result2 = retriever.invoke("給与")
+#    print(result2)
+#    retrieved_doc_text = ""
 
-    # print(result)
-    # for _ in result:
-    #     print(_.page_content)
-    # del retriever
-    # del vector_store
+    for doc, score in result2:
+        print(doc.metadata['@search.score'])
+    del retriever
+    del vector_store
         # 検索を実行
     # question = "When did I visited Asia?"
     # indexes = ['yazawa-index01']
