@@ -12,11 +12,14 @@ from langchain_core.runnables import (
 )
 #def make_retriever
 from tools.makeretriver import set_embeddings, similarity_search_to_aisearch
-
+import stconfig
 
 from dotenv import load_dotenv
 # .envからAOAI接続ようのパラメータを読み込み環境変数にセット
 load_dotenv()
+
+st.set_page_config(**stconfig.SET_PAGE_CONFIG)
+st.markdown(stconfig.HIDE_ST_STYLE, unsafe_allow_html=True)
 
 def get_ai_serach_indexes():
     azure_search_endpoint = os.getenv("AZURE_SEARCH_SERVICE_ENDPOINT")
@@ -144,20 +147,20 @@ def main():
         submitted = st.form_submit_button("Submit evaluation")
 
     # タイトル
-    st.title("AI Search インデックスドキュメント検索")
-
+    st.title("ドキュメント検索 for AI Search🔎")
+#    st.header("`ドキュメント検索 for AI Search`")
     # セッション状態の初期化
     if "history" not in st.session_state:
         st.session_state.history = []
 
     # テキストボックス（プロンプト入力）
-    prompt = st.text_input("検索する文字列を入力してください。")
+    prompt = st.text_input("`検索する文字列を入力してください :`")
 
     # 送信ボタン
     if st.button("送信"):
 
         if not prompt:
-            st.warning("検索する文字列を入力してください。")
+            st.warning("`検索する文字列を入力してください。`")
 
         else:
 #            response = f"結果: {prompt}"  # 仮の処理（ここに処理ロジックを入れる）
@@ -172,9 +175,14 @@ def main():
             summary02['Retrieval score'] = [g.metadata['@search.score'] for g, score in result02] 
             summary02['doc_name'] = [g.metadata['name'] for g, score in result02] 
             summary02['content'] = [g.page_content  for g, score in result02] 
+
+            st.success(f"`【検索した文字列】: {prompt}`")
+            st.subheader("`検索結果`")
             st.dataframe(data=summary02, use_container_width=True)
 #            st.session_state.history.append((prompt, summary02))  # 履歴に追加
-            st.session_state.history.append({"page": 'page02', "data": summary02})  # 履歴に追加
+            st.session_state.history.append({"page": 'page02', "prompt": prompt, "data": {
+                "prompt": prompt,
+                "df1": summary02}})  # 履歴に追加
 
             # **履歴が 3 件を超えたら、古いものを削除**
             # `page01` の履歴のみ 3 件までに制限
@@ -192,12 +200,17 @@ def main():
         if entry["page"] == "page02"
     ]
 
-
-    st.subheader("📜 実行履歴")
-    for idx, entry  in enumerate(filtered_history, 1):
-        with st.expander(f"履歴 {idx}"):
-            st.write(entry["data"])
-
+    with st.container(border=True):
+        st.markdown("<h5 style='color:#808080;'>🕞 実行履歴</h5>",unsafe_allow_html=True)
+        for idx, entry  in enumerate(filtered_history, 1):
+            with st.expander(f"履歴 {idx}"):
+#                st.write(entry["data"])
+                for key, item in entry["data"].items():
+                    if isinstance(item, str):
+                        st.success(f"`【検索した文字列】: {item}`")  # 文字列を表示
+                    elif isinstance(item, pd.DataFrame):
+                        st.subheader("`検索結果`")
+                        st.dataframe(item)  # DataFrame を表示
 
 if __name__ == "__main__":
 

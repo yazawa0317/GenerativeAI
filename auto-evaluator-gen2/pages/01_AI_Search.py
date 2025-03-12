@@ -621,15 +621,15 @@ def main():
         if entry["page"] == "page01"
     ]
 
-
-    st.subheader("📜 実行履歴")
-    for idx, entry  in enumerate(filtered_history, 1):
-        with st.expander(f"履歴 {idx}"):
-            for key, item in entry["data"].items():
-                if isinstance(item, str):
-                    st.subheader(item)  # 文字列を表示
-                elif isinstance(item, pd.DataFrame):
-                    st.dataframe(item)  # DataFrame を表示
+    with st.container(border=True):
+        st.markdown("<h5 style='color:#808080;'>🕞 実行履歴</h5>",unsafe_allow_html=True)
+        for idx, entry  in enumerate(filtered_history, 1):
+            with st.expander(f"履歴 {idx}"):
+                for key, item in entry["data"].items():
+                    if isinstance(item, str):
+                        st.subheader(item)  # 文字列を表示
+                    elif isinstance(item, pd.DataFrame):
+                        st.dataframe(item)  # DataFrame を表示
 
 if __name__ == "__main__":
 

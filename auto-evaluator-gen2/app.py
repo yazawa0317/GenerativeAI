@@ -425,6 +425,17 @@ def main():
 
     # サイドバー
     with st.sidebar.form("user_input"):
+
+        # ウィジェットを枠内に入れる
+        with st.sidebar.container(border=True):
+            st.markdown(
+                "<h4 style='color: black;'>設定</h3>",
+                unsafe_allow_html=True
+            )
+            option = st.selectbox("オプションを選択", ["A", "B", "C"])
+            slider = st.slider("値を選択", 0, 100, 50)
+
+
         num_eval_questions = st.select_slider("`Number of eval questions`",
                                             options=[1, 5, 10, 15, 20], value=5)
 
@@ -601,14 +612,16 @@ def main():
     ]
 
 
-    st.subheader("📜 実行履歴")
-    for idx, entry  in enumerate(filtered_history, 1):
-        with st.expander(f"履歴 {idx}"):
-            for key, item in entry["data"].items():
-                if isinstance(item, str):
-                    st.subheader(item)  # 文字列を表示
-                elif isinstance(item, pd.DataFrame):
-                    st.dataframe(item)  # DataFrame を表示
+#    st.subheader("🕞 実行履歴")
+    with st.container(border=True):
+        st.markdown("<h5 style='color:#808080;'>🕞 実行履歴</h5>",unsafe_allow_html=True)
+        for idx, entry  in enumerate(filtered_history, 1):
+            with st.expander(f"履歴 {idx}"):
+                for key, item in entry["data"].items():
+                    if isinstance(item, str):
+                        st.subheader(item)  # 文字列を表示
+                    elif isinstance(item, pd.DataFrame):
+                        st.dataframe(item)  # DataFrame を表示
 
 if __name__ == "__main__":
 
