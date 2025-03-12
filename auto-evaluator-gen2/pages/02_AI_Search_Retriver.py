@@ -108,15 +108,15 @@ def retrive_chunk(retriever, prompt):
 
 def main():
 
-    if "existing_df" not in st.session_state:
+    if "existing_df_02" not in st.session_state:
         summary02 = pd.DataFrame(columns=['index',
                                         'Retrieval score',
                                         'doc_name',
                                         'content'
                                         ])
-        st.session_state.existing_df = summary02
+        st.session_state.existing_df_02 = summary02
     else:
-        summary02 = st.session_state.existing_df
+        summary02 = st.session_state.existing_df_02
 
     # ロゴ
     # logo = '.streamlit\\logo.PNG'
@@ -124,31 +124,10 @@ def main():
 
     # サイドバー
     with st.sidebar.form("user_input"):
-        num_eval_questions = st.select_slider("`Number of eval questions`",
-                                            options=[1, 5, 10, 15, 20], value=5)
-
-        chunk_chars = st.select_slider("`Choose chunk size for splitting`",
-                                    options=[500, 750, 1000, 1500, 2000], value=1000)
-
-        overlap = st.select_slider("`Choose overlap for splitting`",
-                                options=[0, 50, 100, 150, 200], value=100)
-
-        split_method = st.radio("`Split method`",
-                                ("RecursiveTextSplitter",
-                                "CharacterTextSplitter"),
-                                index=0)
-
-        model = st.radio("`Choose model`",
-                        ("gpt-4o-mini",
-                        "gpt-4o"),
-                        index=0)
 
         retriever_type = st.radio("`Choose retriever`",
-                                ("TF-IDF",
-                                "SVM",
-                                "Llama-Index",
-                                "similarity-search"),
-                                index=3)
+                                ("similarity-search"),
+                                )
 
         num_neighbors = st.select_slider("`Choose # chunks to retrieve`",
                                         options=[3, 4, 5, 6, 7, 8])
@@ -162,30 +141,23 @@ def main():
                             "text-embedding-ada-002"),
                             index=0)
 
-        grade_prompt = st.radio("`Grading style prompt`",
-                                ("Fast",
-                                "Descriptive",
-                                "Descriptive w/ bias check",
-                                "OpenAI grading prompt"),
-                                index=0)
-
         submitted = st.form_submit_button("Submit evaluation")
 
     # タイトル
-    st.title("プロンプト入力アプリ")
+    st.title("AI Search インデックスドキュメント検索")
 
     # セッション状態の初期化
     if "history" not in st.session_state:
         st.session_state.history = []
 
     # テキストボックス（プロンプト入力）
-    prompt = st.text_input("プロンプトを入力してください")
+    prompt = st.text_input("検索する文字列を入力してください。")
 
     # 送信ボタン
     if st.button("送信"):
 
         if not prompt:
-            st.warning("プロンプトを入力してください。")
+            st.warning("検索する文字列を入力してください。")
 
         else:
 #            response = f"結果: {prompt}"  # 仮の処理（ここに処理ロジックを入れる）
@@ -194,22 +166,37 @@ def main():
             # Make vector DB
             retriever = make_retriever(retriever_type, embeddings, target_index, num_neighbors)
             
-            result = retrive_chunk(retriever, prompt)
+            result02 = retrive_chunk(retriever, prompt)
 
-            summary02['index'] = [target_index] * len(result)
-            summary02['Retrieval score'] = [g.metadata['@search.score'] for g, score in result] 
-            summary02['doc_name'] = [g.metadata['name'] for g, score in result] 
-            summary02['content'] = [g.page_content  for g, score in result] 
+            summary02['index'] = [target_index] * len(result02)
+            summary02['Retrieval score'] = [g.metadata['@search.score'] for g, score in result02] 
+            summary02['doc_name'] = [g.metadata['name'] for g, score in result02] 
+            summary02['content'] = [g.page_content  for g, score in result02] 
             st.dataframe(data=summary02, use_container_width=True)
-            st.session_state.history.append((prompt, summary02))  # 履歴に追加
+#            st.session_state.history.append((prompt, summary02))  # 履歴に追加
+            st.session_state.history.append({"page": 'page02', "data": summary02})  # 履歴に追加
 
-
+            # **履歴が 3 件を超えたら、古いものを削除**
+            # `page01` の履歴のみ 3 件までに制限
+            page01_entries = [entry for entry in st.session_state.history if entry["page"] == "page02"]
+            if len(page01_entries) > 3:
+                # 最も古い `page01` のエントリを削除
+                for i, entry in enumerate(st.session_state.history):
+                    if entry["page"] == "page02":
+                        del st.session_state.history[i]
+                        break  # 一度削除したらループを抜ける
 
     # 履歴を表示
-    st.subheader("📜 メインメニュー（過去の入力履歴）")
-    for idx, (old_prompt, old_response) in enumerate(reversed(st.session_state.history), 1):
-        with st.expander(f"履歴 {idx}: {old_prompt}"):
-            st.write(old_response)
+    filtered_history = [
+        entry for entry in reversed(st.session_state.history)  # 最新の履歴を上に表示
+        if entry["page"] == "page02"
+    ]
+
+
+    st.subheader("📜 実行履歴")
+    for idx, entry  in enumerate(filtered_history, 1):
+        with st.expander(f"履歴 {idx}"):
+            st.write(entry["data"])
 
 
 if __name__ == "__main__":

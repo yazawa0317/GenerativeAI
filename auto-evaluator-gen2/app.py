@@ -399,9 +399,13 @@ def cleanup(faiss_index_path):
 
 def main():
 
+    # セッション状態の初期化
+    if "history" not in st.session_state:
+        st.session_state.history = []
+
     # Keep dataframe in memory to accumulate experimental results
-    if "existing_df" not in st.session_state:
-        summary = pd.DataFrame(columns=['chunk_chars',
+    if "existing_df_00" not in st.session_state:
+        summary00 = pd.DataFrame(columns=['chunk_chars',
                                         'overlap',
                                         'split',
                                         'model',
@@ -411,9 +415,9 @@ def main():
                                         'Latency',
                                         'Retrieval score',
                                         'Answer score'])
-        st.session_state.existing_df = summary
+        st.session_state.existing_df_00 = summary00
     else:
-        summary = st.session_state.existing_df
+        summary00 = st.session_state.existing_df_00
 
     # ロゴ
     # logo = '.streamlit\\logo.PNG'
@@ -558,12 +562,12 @@ def main():
                                 'Latency': [mean_latency],
                                 'Retrieval score': [percentage_docs],
                                 'Answer score': [percentage_answer]})
-        summary = pd.concat([summary, new_row], ignore_index=True)
-        st.dataframe(data=summary, use_container_width=True)
-        st.session_state.existing_df = summary
+        summary00 = pd.concat([summary00, new_row], ignore_index=True)
+        st.dataframe(data=summary00, use_container_width=True)
+        st.session_state.existing_df_00 = summary00
 
         # Dataframe for visualization
-        show = summary.reset_index().copy()
+        show = summary00.reset_index().copy()
         show.columns = ['expt number', 'chunk_chars', 'overlap',
                         'split', 'model', 'retriever', 'embedding', 'num_neighbors', 'Latency', 'Retrieval score',
                         'Answer score']
@@ -574,6 +578,37 @@ def main():
                                                 color='expt number',
                                                 tooltip=['expt number', 'Retrieval score', 'Latency', 'Answer score'])
         st.altair_chart(c, use_container_width=True, theme="streamlit")
+
+        st.session_state.history.append({"page": "page00", "data": {
+            "text1": "`QA SET`", "df1": e,
+            "text2": "`Run Results`", "df2": d,
+            "text3": "`Aggregate Results`", "df3": new_row}}) 
+
+        # **履歴が 3 件を超えたら、古いものを削除**
+        # `page01` の履歴のみ 3 件までに制限
+        page01_entries = [entry for entry in st.session_state.history if entry["page"] == "page00"]
+        if len(page01_entries) > 3:
+            # 最も古い `page01` のエントリを削除
+            for i, entry in enumerate(st.session_state.history):
+                if entry["page"] == "page00":
+                    del st.session_state.history[i]
+                    break  # 一度削除したらループを抜ける
+
+    # 履歴を表示
+    filtered_history = [
+        entry for entry in reversed(st.session_state.history)  # 最新の履歴を上に表示
+        if entry["page"] == "page00"
+    ]
+
+
+    st.subheader("📜 実行履歴")
+    for idx, entry  in enumerate(filtered_history, 1):
+        with st.expander(f"履歴 {idx}"):
+            for key, item in entry["data"].items():
+                if isinstance(item, str):
+                    st.subheader(item)  # 文字列を表示
+                elif isinstance(item, pd.DataFrame):
+                    st.dataframe(item)  # DataFrame を表示
 
 if __name__ == "__main__":
 
