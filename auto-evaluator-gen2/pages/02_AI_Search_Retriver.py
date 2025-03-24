@@ -135,6 +135,9 @@ def main():
         num_neighbors = st.select_slider("`Choose # chunks to retrieve`",
                                         options=[3, 4, 5, 6, 7, 8])
 
+        score_threshold = st.select_slider("`Choose chunk size for splitting`",
+                                    options=[0.4, 0.5, 0.6, 0.7, 0.8], value=0.6)
+
         target_index = st.selectbox("`Choose index`",
                                 options=get_ai_serach_indexes())
 
@@ -167,10 +170,10 @@ def main():
             # Make LLM
 #            llm = make_llm(model)
             # Make vector DB
-            retriever = make_retriever(retriever_type, embeddings, target_index, num_neighbors)
+            retriever = make_retriever(retriever_type, embeddings, target_index, num_neighbors, score_threshold)
             
             result02 = retrive_chunk(retriever, prompt)
-
+            summary02 = pd.DataFrame()
             summary02['index'] = [target_index] * len(result02)
             summary02['Retrieval score'] = [g.metadata['@search.score'] for g, score in result02] 
             summary02['doc_name'] = [g.metadata['name'] for g, score in result02] 

@@ -1,0 +1,91 @@
+
+vmname
+"belldata-stg-vm01"
+ResourceGroupName
+"belldata-stg-rg01"
+Action
+"Start"
+AzureSubscriptionID
+"c89e959a-cc71-4e90-82ae-cb2737b6316e"
+
+
+https://belldata-stg-phase3n-api01.azurewebsites.net
+QUSRNOMAX
+449
+8771
+ ===> CALL PGM(QP2SHELL) PARM(('/QOpenSys/usr/bin/-sh') ('-c')('ssh -fN -R 0.0.0.0:449:localhost:449 belldata-stg-work'))                                       
+ssh -fN -R 449:localhost:449 belldata-stg-work 20.243.174.38
+5733SC1 IBM Portable Utilities for i5/OS *BASE & オプション 1
+
+57XXSS1 オプション 33 (ポータブル アプリケーション ソリューション環境)
+ssh -fN -R 0.0.0.0:449:localhost:449 belldata-stg-work && \
+ssh -fN -R 0.0.0.0:8470:localhost:8470 belldata-stg-work && \
+ssh -fN -R 0.0.0.0:8471:localhost:8471 belldata-stg-work && \
+ssh -fN -R 0.0.0.0:8472:localhost:8472 belldata-stg-work && \
+ssh -fN -R 0.0.0.0:8473:localhost:8473 belldata-stg-work && \
+ssh -fN -R 0.0.0.0:8474:localhost:8474 belldata-stg-work && \
+ssh -fN -R 0.0.0.0:8475:localhost:8475 belldata-stg-work && \
+ssh -fN -R 0.0.0.0:8476:localhost:8476 belldata-stg-work 
+
+-L 8470:localhost:8470 \
+-L 8471:localhost:8471 \
+-L 8472:localhost:8472 \
+-L 8473:localhost:8473 \
+-L 8474:localhost:8474 \
+-L 8475:localhost:8475 \
+-L 8476:localhost:8476 \
+belldata-stg-work
+
+G
+
+gpt-stg-web-login/data/db2fori/DB2FORI_2/read
+3ff6bfb5-a743-453a-a0d9-fb14791f2760
+92141739-d41b-473d-8189-a449a9ef5ce9
+https://account.activedirectory.windowsazure.com:444/applications/default.aspx?metadata=customappsso|ISV9.1|primary|z
+2024/9/30
+-
+-
+92141739-d41b-473d-8189-a449a9ef5ce9
+G
+
+gpt-stg-web-login/data/db2fori/DUMMY/read-write
+eff1d8dc-58e0-414c-9c5e-7bb98f1c46f7
+54a34867-8354-4ba3-8947-1f1e6a3e1aa4
+https://account.activedirectory.windowsazure.com:444/applications/default.aspx?metadata=customappsso|ISV9.1|primary|z
+2024/11/3
+-
+-
+54a34867-8354-4ba3-8947-1f1e6a3e1aa4
+G
+
+gpt-stg-web-login/data/db2fori/DUMMY/read
+b677f590-f4c6-4381-9c92-65e09250f335
+00a478d9-046e-4e2c-a79c-4e89aaea6082
+https://account.activedirectory.windowsazure.com:444/applications/default.aspx?metadata=customappsso|ISV9.1|primary|z
+2024/11/3
+-
+-
+00a478d9-046e-4e2c-a79c-4e89aaea6082
+G
+
+gpt-stg-web-login/data/db2fori/DB2FORI_2/read-write
+9de84c48-32cb-4e56-b6f1-a31986ed1273
+105d2b72-f430-4e0d-af1d-dc56aa6d683c
+https://account.activedirectory.windowsazure.com:444/applications/default.aspx?metadata=customappsso|ISV9.1|primary|z
+2024/9/30
+-
+-
+105d2b72-f430-4e0d-af1d-dc56aa6d683c
+G
+
+gpt-stg-web-login/data/knowledge/DB2FORI_2/read-write
+203d1a6e-1d25-44c1-ab06-b7eb32004ebd
+fc357f24-19fe-4c27-a39a-247ba58ecbf8
+https://account.activedirectory.windowsazure.com:444/applications/default.aspx?metadata=customappsso|ISV9.1|primary|z
+2024/9/30
+-
+-
+fc357f24-19fe-4c27-a39a-247ba58ecbf8
+G
+
+gpt-stg-web-login/data/knowledge/DB2FORI/read
