@@ -6,8 +6,8 @@ import shutil
 import requests
 import io
 import uuid
-import tiktoken
-import zipfile
+import random
+
 # def load_docs
 from typing import List
 from tools.fileconverter import extract_text_detect_encode, extract_text_from_pdf
@@ -93,52 +93,21 @@ def load_docs(files: List) -> str:
     return all_text
 
 @st.cache_data
-def csv_load(files: List):
+def generate_eval(text: str, num_questions: int, chunk: int, embeddings):
     """
-    Load docs from files
-    @param files: list of files to load
-    @return: string of all docs concatenated
+    Generate eval set
+    @param text: text to generate eval set from
+    @param num_questions: number of questions to generate
+    @param chunk: chunk size to draw question from in the doc
+    @return: eval set as JSON list
     """
-    st.info("`Reading doc ....`")
-    all_csv = []
-    for file_path in files:
-        file_extension = os.path.splitext(file_path.name)[1].lower()
-        if file_extension == ".csv":
-            df = pd.read_csv(file_path)
-            if df.empty or df.columns.tolist() == [None]:
-                df = pd.DataFrame(columns=["default_column"])
-            all_csv.append((file_path.name,df))
-        else:
-            st.warning('Please provide txt or pdf.', icon="⚠️")
-    return all_csv
-
-def csv_convert(header_exist, df, embeddings):
-    st.info("`Splitting doc ...`")
-    content_list = []
-    oversize_content_list=[]
-    for index, row in df.iterrows():
-        markdown_content = ""
-        for column in df.columns:
-            if header_exist == 'True':
-                markdown_content += f"## {column}\n"
-                markdown_content += f"{row[column]}\n"
-            else:
-                markdown_content += f"{row[column]}\n"
-        tokens = num_tokens_from_string(markdown_content, embeddings)
-        if tokens < 8000:
-            content_list.append(markdown_content.strip())  # stripで末尾の空白を削除
-
-        else:
-            oversize_content_list.append(markdown_content.strip())  # stripで末尾の空白を削除
-
-    return content_list, oversize_content_list
-
-
-def num_tokens_from_string(string: str, model_name: str) -> int:
-    """Returns the number of tokens in a text string."""
-    encoding = tiktoken.encoding_for_model(model_name)
-    num_tokens = len(encoding.encode(string))
-    return num_tokens
+    st.info("`Generating eval set ...`")
+    try:
+        result = generateQA(text=text, chunk=chunk, num_questions=num_questions, encoding_name=embeddings)
+    except:
+        st.warning('Error generating question')
+    
+    return result
 
 @st.cache_resource
 def split_texts(text, encoding_name, chunk_size: int, overlap, split_method: str):
@@ -161,6 +130,11 @@ def split_texts(text, encoding_name, chunk_size: int, overlap, split_method: str
 
 def main():
 
+    # セッション状態の初期化
+    if "history" not in st.session_state:
+        st.session_state.history = []
+
+
     # ロゴ
     # logo = '.streamlit\\logo.PNG'
     # st.logo(f"{logo}")
@@ -168,12 +142,18 @@ def main():
     # サイドバー
     with st.sidebar.form("user_input"):
 
-        header_exist = st.radio("`with header`",
-                                ("True",
-                                "false"),
+        num_eval_questions = st.select_slider("`Number of eval questions`",
+                                            options=[1, 5, 10, 15, 20], value=5)
+
+        overlap = st.select_slider("`Choose overlap for splitting`",
+                                options=[0, 50, 100, 150, 200], value=100)
+
+        split_method = st.radio("`Split method`",
+                                ("RecursiveTextSplitter",
+                                "CharacterTextSplitter"),
                                 index=0)
 
-        embeddings = st.radio("`Choose Embeddings model of token counting`",
+        embeddings = st.radio("`Choose embeddings`",
                             ("text-embedding-3-large",
                             "text-embedding-ada-002"),
                             index=0)
@@ -181,15 +161,15 @@ def main():
         submitted = st.form_submit_button("Submit evaluation")
 
     # アプリケーション
-    st.title("CSV整形")
+    st.title("ドキュメント分割")
     st.info(
         "`I am an evaluation tool for question-answering. Given documents, I will auto-generate a question-answer eval "
         "set and evaluate using the selected chain settings. Experiments with different configurations are logged. "
         "Optionally, provide your own eval set (as a JSON, see docs/karpathy-pod-eval.json for an example).`")
 
     with st.form(key='file_inputs'):
-        uploaded_file = st.file_uploader("`Please upload a file to evaluate (.csv):` ",
-                                        type=['csv'],
+        uploaded_file = st.file_uploader("`Please upload a file to evaluate (.txt or .pdf):` ",
+                                        type=['pdf', 'txt'],
                                         accept_multiple_files=True)
 
         submitted = st.form_submit_button("Submit files")
@@ -197,69 +177,78 @@ def main():
     if uploaded_file:
 
         # Load docs
-        docs = csv_load(uploaded_file)
+        st.info("`Reading doc ....`")
+        docs = load_docs(uploaded_file)
+        text = ''
+        eval_set = []
+        for file_name, content in docs:
+            text += content
+            result = generate_eval(text, num_eval_questions, 1000, embeddings)
+            result = [{**item, "file_name": file_name} for item in result]
+            eval_set += result
 
-        dfs = []
 
-        for file_name, file_content in docs:
-       # Split text
-            file_content_fromated, oversize_content_list = csv_convert(header_exist, file_content, embeddings)
-            formated_df = pd.DataFrame({'content': file_content_fromated})
-            oversize_df = pd.DataFrame({'content': oversize_content_list})
-            # DataFrame に変換（カラム名を 'content' にする）
-            dfs.append((file_name, "分割したデータ", formated_df, formated_df.shape[0]))
+        selected_qa = random.sample(eval_set, num_eval_questions)
 
-            if oversize_content_list:
-                oversize_file_name = os.path.splitext(file_name)[0] + "_oversize.csv"
-                dfs.append((f"{oversize_file_name}_oversize", "サイズ超過データ", oversize_df, oversize_df.shape[0]))
+        e = pd.DataFrame()
+        e['file_name'] = [g['file_name'] for g in selected_qa]  
+        e['question'] = [g['question'] for g in selected_qa]    
+        e['answer'] = [g['answer'] for g in selected_qa]    
+        
+        st.subheader("`QA SET`")
+        st.info(
+            "`I will grade the chain based on: 1/ the relevance of the retrived documents relative to the question and 2/ "
+            "the summarized answer relative to the ground truth answer. You can see (and change) to prompts used for "
+            "grading in text_utils`")
+        st.dataframe(data=e, use_container_width=True)
 
-        st.markdown("<h5 style='color:#808080;'>🕞 CSV出力</h5>",unsafe_allow_html=True)
+        selected_qa = [{k: v for k, v in item.items() if k != "file_name"} for item in selected_qa]
+        json_data = json.dumps(selected_qa, ensure_ascii=False, indent=4)
 
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            for file_name, label, df, _ in dfs:
-                csv_buffer = io.StringIO()
-                df.to_csv(csv_buffer, index=False, encoding="utf-8")
-                csv_data = csv_buffer.getvalue()
+        st.title("JSON ダウンロード")
 
-                # ファイル名を整形
-                formatted_file_name = f"{os.path.splitext(file_name)[0].lower()}_{label}.csv"
+        st.write("以下のボタンをクリックすると JSON ファイルをダウンロードできます。")
 
-                # ZIP に追加
-                zip_file.writestr(formatted_file_name, csv_data)
-
-        # ZIPデータをメモリに保持
-        zip_buffer.seek(0)
-        zip_data = zip_buffer.getvalue()
-
-        # **ダウンロードボタン（ZIPで一括）**
+        # ダウンロードボタン
         st.download_button(
-            label="📥 すべての CSV を一括ダウンロード",
-            data=zip_data,
-            file_name=f"csv_files_{uuid.uuid4().hex}.zip",
-            mime="application/zip"
+            label="JSON をダウンロード",
+            data=json_data,
+            file_name="eval_set.json",
+            mime="application/json"
         )
 
-        st.write("---") 
+        st.session_state.history.append({"page": 'page05', "data": {
+            "text1": "`QA SET`", "df1": e, 'QAFile': json_data}})
 
-        for file_name, label, df , lines in dfs:
-            # メモリ上に CSV を保存
-            csv_buffer = io.StringIO()
-            df.to_csv(csv_buffer, index=False, encoding="utf-8")
-            csv_data = csv_buffer.getvalue()
+    # 履歴を表示
+    filtered_history = [
+        entry for entry in reversed(st.session_state.history)  # 最新の履歴を上に表示
+        if entry["page"] == "page05"
+    ]
 
-            file_name = os.path.splitext(file_name)[0].lower() + '.csv'
-            unique_key = f"download_{file_name}_{uuid.uuid4()}"
+    # **履歴が 3 件を超えたら、古いものを削除**
+    # `page01` の履歴のみ 3 件までに制限
+    page05_entries = [entry for entry in st.session_state.history if entry["page"] == "page05"]
+    if len(page05_entries) > 3:
+        # 最も古い `page01` のエントリを削除
+        for i, entry in enumerate(st.session_state.history):
+            if entry["page"] == "page05":
+                del st.session_state.history[i]
+                break  # 一度削除したらループを抜ける   
 
-            # CSV ダウンロードボタン
-            st.download_button(
-                label=f"📥 【{file_name}】{label} ({lines} 行) をダウンロード",
-                data=csv_data,
-                file_name=file_name,
-                mime="text/csv",
-                key=unique_key  # UUID をキーに設定し、重複を防ぐ
-    )
-
+    with st.container(border=True):
+        st.markdown("<h5 style='color:#808080;'>🕞 実行履歴</h5>",unsafe_allow_html=True)
+        for idx, entry  in enumerate(filtered_history, 1):
+            with st.expander(f"履歴 {idx}"):
+                for key, item in entry["data"].items():
+                    if isinstance(item, str):
+                        if key == "QAFile":
+                            with st.container():
+                                st.code(item, language='json')
+                        else:
+                            st.subheader(item)  # 文字列を表示
+                    elif isinstance(item, pd.DataFrame):
+                        st.dataframe(item)  # DataFrame を表示
 
 if __name__ == "__main__":
 
